@@ -11,3 +11,4 @@ ipython = "*"
 
 [packages]
 "boto3" = "*"
+click = "*"
