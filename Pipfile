@@ -8,6 +8,7 @@ python_version = "3.4"
 
 [dev-packages]
 ipython = "*"
+setuptools = "*"
 
 [packages]
 "boto3" = "*"

@@ -12,7 +12,7 @@ shotty uses config file created by the aws cli
 `aws configure --profile shotty`
 
 be sure to have pipenv installed
-`sudo pip3 install pipenv`
+`sudo -H pip3 install pipenv`
 
 ##Running
 
@@ -25,4 +25,11 @@ be sure to have pipenv installed
 `pipenv run python shotty/shotty.py --help`
 
 for more info
+
+##Build
+`pipenv run python setup.py bdist_wheel`
+
+##Install
+
+`sudo -H pip3 install dist/snapshotthingy_3000-0.2-py3-none-any.whl`
 
