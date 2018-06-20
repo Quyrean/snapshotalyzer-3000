@@ -11,10 +11,18 @@ shotty uses config file created by the aws cli
 
 `aws configure --profile shotty`
 
+be sure to have pipenv installed
+`sudo pip3 install pipenv`
+
 ##Running
 
-`pipenv run python shotty/shotty.py <command> <--project=<tag>`
+`pipenv run python shotty/shotty.py <command> <subcommand> <--project=<tag>`
 
-*command* is list, start, or stop
+*command* is instances, snapshots, or volumes
+*subcommand* depends on command, but can be list, start, or stop
 *project* is optional (it is the value of the tag "PROJECT"
+
+`pipenv run python shotty/shotty.py --help`
+
+for more info
 

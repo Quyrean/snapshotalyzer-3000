@@ -25,6 +25,47 @@ def cli():
 def volumes():
     """Commands for volumes"""
 
+@volumes.command('list')
+@click.option('--project', default=None, help="Only volumes for project (tag Project:<name>)")
+def list_volumes(project):
+    "List EC2 volumes"
+
+    instances = filter_instances(project)
+
+    for i in instances:
+        for v in i.volumes.all():
+            print (", ".join((
+                v.id,
+                i.id,
+                v.state,
+                str(v.size) + " GiB",
+                v.encrypted and "Encrypted" or "Not Encrypted"
+            )))
+    return
+
+@cli.group('snapshots')
+def snapshots():
+    """Commands for shapshots"""
+
+@snapshots.command('list')
+@click.option('--project', default=None, help="Only snapshots for project (tag Project:<name>)")
+def list_snapshots(project):
+    "List EC2 snapshots"
+
+    instances = filter_instances(project)
+
+    for i in instances:
+        for v in i.volumes.all():
+            for s in v.snapshots.all():
+                print (", ".join((
+                    s.id,
+                    v.id,
+                    i.id,
+                    s.state,
+                    s.progress,
+                    s.start_time.strftime("%c")
+            )))
+    return
 
 
 @cli.group('instances')
@@ -49,6 +90,28 @@ def list_instances(project):
             i.public_dns_name,
             tags.get('Project', '<no project>')
             )))
+
+    return
+
+@instances.command('snapshot')
+@click.option('--project', default=None, help="Only instances for project (tag Project:<name>)")
+def snapshot_instances(project):
+    "Create a snapshot for each EC2 instances"
+
+    instances = filter_instances(project)
+
+    for i in instances:
+        print("Stopping {0}...".format(i.id))
+        i.stop()
+        i.wait_until_stopped()
+
+        for v in i.volumes.all():
+            print("  Creating snapshot for {0}".format(v.id))
+            v.create_snapshot(Description="created by script")
+
+        print("Starting {0}...".format(i.id))
+        i.start()
+        i.wait_until_running()
 
     return
 
