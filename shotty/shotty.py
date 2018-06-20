@@ -19,6 +19,10 @@ def filter_instances(project):
     return instances
 
 
+def has_pending_snapshot(volume):
+    snapshots = list(volume.snapshots.all())
+    return snapshots and snapshots[0].state == 'pending'
+
 @click.group()
 def cli():
     """Shotty manages snapshots"""
@@ -110,8 +114,15 @@ def snapshot_instances(project):
         i.wait_until_stopped()
 
         for v in i.volumes.all():
+            if has_pending_snapshot(v):
+                print("  Skipping {0} as snapshot is already in progress".format(v.id))
+                continue
             print("  Creating snapshot for {0}".format(v.id))
-            v.create_snapshot(Description="created by script")
+            try:
+                v.create_snapshot(Description="created by script")
+            except botocore.exceptions.ClientError as e:
+                print("  Problem creating snapshot for {0}.  ".format(v.id) + str(e))
+                continue
 
         print("Starting {0}...".format(i.id))
         i.start()
