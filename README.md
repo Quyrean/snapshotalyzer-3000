@@ -15,3 +15,6 @@ shotty uses config file created by the aws cli
 
 `pipenv run python shotty/shotty.py <command> <--project=<tag>`
 
+*command* is list, start, or stop
+*project* is optional (it is the value of the tag "PROJECT"
+
