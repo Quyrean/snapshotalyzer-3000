@@ -51,7 +51,8 @@ def snapshots():
 
 @snapshots.command('list')
 @click.option('--project', default=None, help="Only snapshots for project (tag Project:<name>)")
-def list_snapshots(project):
+@click.option('--all', 'listall', default=False, is_flag=True, help="List all the snapshots")
+def list_snapshots(project, listall):
     "List EC2 snapshots"
 
     instances = filter_instances(project)
@@ -66,7 +67,8 @@ def list_snapshots(project):
                     s.state,
                     s.progress,
                     s.start_time.strftime("%c")
-            )))
+                )))
+                if s.state == 'completed' and not listall: break
     return
 
 
