@@ -2,21 +2,29 @@ import boto3
 import botocore
 import click
 
-#setup session
-session = boto3.Session(profile_name='shotty')
-ec2 = session.resource('ec2')
-
-def filter_instances(project):
+def filter_instances(session, project, instanceId):
     instances = []
 
     print("Looking up instance list...")
-    if project:
+    ec2 = session.resource('ec2')
+    if instanceId:
+        try:
+            instance = ec2.Instance(instanceId)
+            tmp = instance.tags  #apparently boto3 has lazy loading so we wont know if this is wrong until we try something, kinda lame
+        except botocore.exceptions.ClientError as e:
+            print("Unable to find instance {0}".format(str(instanceId)))
+        else:
+            if(instance): instances.append(instance)
+       
+    elif project:
         filters = [{'Name':'tag:Project', 'Values':[project]}]   #"PythonIsLame"
         instances = ec2.instances.filter(Filters=filters)
     else:
         instances = ec2.instances.all()
 
-    if not instances: print("No matching instances found")
+    count = 0;
+    for i in instances: count += 1
+    print ("Found {0} matching instances".format(str(count)))
     return instances
 
 
@@ -25,22 +33,37 @@ def has_pending_snapshot(volume):
     return snapshots and snapshots[0].state == 'pending'
 
 class ShottyCtx(object):
-    def __init__(self, instances=None):
+    def __init__(self, session=None, instances=None):
         self.instances=instances
+        self.session = session
 
 
 @click.group()
-@click.option('--project', default=None, help="Specify instance by tag, only instances with the given tag will be used. (tag Project:TEXT)")
-@click.option('--force',   default=False, is_flag=True, help="Safty check, use to specify ALL instances you have permission for")
-#@click.option('--profile', default=None, help="Specify which aws ec2 profile to use")
+@click.option('--project',  default=None,     help="Specify instance by tag, only instances with the given tag will be used. (tag Project:TEXT)")
+@click.option('--force',    default=False,    is_flag=True, help="Safty check, use to specify ALL instances you have permission for")
+@click.option('--profile',  default="shotty", help="Specify which aws ec2 profile to use")
+@click.option('--instance', 'instanceId', default=None,     help="Specify exact instance id")
 @click.pass_context
-def cli(ctx, project, force):
+def cli(ctx, project, force, profile, instanceId):
     """Shotty manages snapshots"""
-    if not project and force == False:
+
+    #check for force flag
+    if force == False and not project and not instanceId:
         raise click.ClickException("Must use --force to apply operation to all insances")
         return
     
-    ctx.obj = ShottyCtx(filter_instances(project))
+    #setup session
+    try:
+        session = boto3.Session(profile_name=profile)
+    except botocore.exceptions.ProfileNotFound as e:
+        raise click.ClickException("Profile '" + str(profile) + "' not found")
+        return
+
+
+    #get list of instances
+    instances = filter_instances(session, project, instanceId)
+
+    ctx.obj = ShottyCtx(session, instances)
 
     return
 
@@ -194,14 +217,12 @@ def start_instances(ctx):
 def reboot_instances(ctx, dryrun):
     "Reboot EC2 instances"
 
-    instances = ctx.instances
-
     reboot_list = []
-    for i in instances:
+    for i in ctx.instances:
         print("Adding {0} to reboot list".format(i.id))
         reboot_list.append(i.id)
 
-    client = session.client('ec2')
+    client = ctx.session.client('ec2')
     print("Rebooting instances " + " ".join(reboot_list))
     try:
         response = client.reboot_instances(
