@@ -43,8 +43,9 @@ class ShottyCtx(object):
 @click.option('--force',    default=False,    is_flag=True, help="Safty check, use to specify ALL instances you have permission for")
 @click.option('--profile',  default="shotty", help="Specify which aws ec2 profile to use")
 @click.option('--instance', 'instanceId', default=None,     help="Specify exact instance id")
+@click.option('--region',   'regionName', default=None,     help="Override region in profile")
 @click.pass_context
-def cli(ctx, project, force, profile, instanceId):
+def cli(ctx, project, force, profile, instanceId, regionName):
     """Shotty manages snapshots"""
 
     #check for force flag
@@ -54,9 +55,12 @@ def cli(ctx, project, force, profile, instanceId):
     
     #setup session
     try:
-        session = boto3.Session(profile_name=profile)
+        session = boto3.Session(profile_name=profile, region_name=regionName)
     except botocore.exceptions.ProfileNotFound as e:
         raise click.ClickException("Profile '" + str(profile) + "' not found")
+        return
+    except Exception as e:
+        raise click.ClickException("Unable to use profile  " + str(e))
         return
 
 
@@ -149,8 +153,12 @@ def snapshot_instances(ctx):
     instances = ctx.instances
 
     for i in instances:
-        stop_instance(i)
-        i.wait_until_stopped()
+        state = i.state['Code']
+        was_running = False;
+        if(state == 0 or state == 16): was_running = True;
+        if was_running:
+            stop_instance(i)
+            i.wait_until_stopped()
 
         for v in i.volumes.all():
             if has_pending_snapshot(v):
@@ -163,8 +171,9 @@ def snapshot_instances(ctx):
                 print("  Problem creating snapshot for {0}.  ".format(v.id) + str(e))
                 continue
 
-        start_instance(i)
-        i.wait_until_running()
+        if was_running:
+            start_instance(i)
+            i.wait_until_running()
 
     return
 
