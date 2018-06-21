@@ -1,6 +1,8 @@
 import boto3
 import botocore
 import click
+from datetime import datetime
+from datetime import timezone
 
 def filter_instances(session, project, instanceId):
     instances = []
@@ -28,9 +30,29 @@ def filter_instances(session, project, instanceId):
     return instances
 
 
-def has_pending_snapshot(volume):
-    snapshots = list(volume.snapshots.all())
-    return snapshots and snapshots[0].state == 'pending'
+
+#return true if instance is running
+def is_running(instance):
+    state = instance.state['Code']
+    #code for running and pending
+    return state == 0 or state == 16
+
+#return a list of volumes to snapshot
+def needs_snapshot(instance, days):
+    answer = []
+    right_now = datetime.now(timezone.utc)
+    for v in instance.volumes.all():
+
+        snapshots = list(v.snapshots.all())
+        if snapshots:
+            delta = right_now - snapshots[0].start_time
+            if snapshots[0].state == 'pending' or  (delta.days > 0 and delta.days <= days):
+                print("  Skipping {0}, {3} it has only been {1} days since its' last confession".format(v.id, str(delta.days), str(snapshots[0].state)))
+                continue
+
+        answer.append(v)
+    return answer
+    
 
 class ShottyCtx(object):
     def __init__(self, session=None, instances=None):
@@ -147,29 +169,26 @@ def list_instances(ctx):
 
 @instances.command('snapshot')
 @click.pass_obj
-def snapshot_instances(ctx):
-    "Create a snapshot for each EC2 instances"
+@click.option('--age',  default=0, help="Minimum number of days between snapshot")
+def snapshot_instances(ctx, age):
+    "Create a snapshot for each volume on each instance"
 
-    instances = ctx.instances
+    for i in ctx.instances:
+        #check if any volumes need snapshot
+        vol_list = needs_snapshot(i, age)
+        if not vol_list: continue
 
-    for i in instances:
-        state = i.state['Code']
-        was_running = False;
-        if(state == 0 or state == 16): was_running = True;
+        was_running = is_running(i)
         if was_running:
             stop_instance(i)
             i.wait_until_stopped()
 
-        for v in i.volumes.all():
-            if has_pending_snapshot(v):
-                print("  Skipping {0} as snapshot is already in progress".format(v.id))
-                continue
+        for v in vol_list:
             print("  Creating snapshot for {0}".format(v.id))
             try:
                 v.create_snapshot(Description="created by script")
             except botocore.exceptions.ClientError as e:
                 print("  Problem creating snapshot for {0}.  ".format(v.id) + str(e))
-                continue
 
         if was_running:
             start_instance(i)

@@ -13,3 +13,4 @@ setuptools = "*"
 [packages]
 "boto3" = "*"
 click = "*"
+datetime = "*"
