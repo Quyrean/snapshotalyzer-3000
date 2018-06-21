@@ -2,7 +2,6 @@ import boto3
 import botocore
 import click
 
-
 #setup session
 session = boto3.Session(profile_name='shotty')
 ec2 = session.resource('ec2')
@@ -10,12 +9,14 @@ ec2 = session.resource('ec2')
 def filter_instances(project):
     instances = []
 
+    print("Looking up instance list...")
     if project:
         filters = [{'Name':'tag:Project', 'Values':[project]}]   #"PythonIsLame"
         instances = ec2.instances.filter(Filters=filters)
     else:
         instances = ec2.instances.all()
 
+    if not instances: print("No matching instances found")
     return instances
 
 
@@ -23,20 +24,36 @@ def has_pending_snapshot(volume):
     snapshots = list(volume.snapshots.all())
     return snapshots and snapshots[0].state == 'pending'
 
+class ShottyCtx(object):
+    def __init__(self, instances=None):
+        self.instances=instances
+
+
 @click.group()
-def cli():
+@click.option('--project', default=None, help="Specify instance by tag, only instances with the given tag will be used. (tag Project:TEXT)")
+@click.option('--force',   default=False, is_flag=True, help="Safty check, use to specify ALL instances you have permission for")
+#@click.option('--profile', default=None, help="Specify which aws ec2 profile to use")
+@click.pass_context
+def cli(ctx, project, force):
     """Shotty manages snapshots"""
+    if not project and force == False:
+        raise click.ClickException("Must use --force to apply operation to all insances")
+        return
+    
+    ctx.obj = ShottyCtx(filter_instances(project))
+
+    return
 
 @cli.group('volumes')
 def volumes():
     """Commands for volumes"""
 
 @volumes.command('list')
-@click.option('--project', default=None, help="Only volumes for project (tag Project:<name>)")
-def list_volumes(project):
+@click.pass_obj
+def list_volumes(ctx):
     "List EC2 volumes"
 
-    instances = filter_instances(project)
+    instances = ctx.instances
 
     for i in instances:
         for v in i.volumes.all():
@@ -54,12 +71,12 @@ def snapshots():
     """Commands for shapshots"""
 
 @snapshots.command('list')
-@click.option('--project', default=None, help="Only snapshots for project (tag Project:<name>)")
+@click.pass_obj
 @click.option('--all', 'listall', default=False, is_flag=True, help="List all the snapshots")
-def list_snapshots(project, listall):
-    "List EC2 snapshots"
+def list_snapshots(ctx, listall):
+    "List most recent EC2 snapshot for each instance"
 
-    instances = filter_instances(project)
+    instances = ctx.instances
 
     for i in instances:
         for v in i.volumes.all():
@@ -81,11 +98,11 @@ def instances():
     """Commands for instances"""
 
 @instances.command('list')
-@click.option('--project', default=None, help="Only instances for project (tag Project:<name>)")
-def list_instances(project):
+@click.pass_obj
+def list_instances(ctx):
     "List EC2 instances"
 
-    instances = filter_instances(project)
+    instances = ctx.instances
 
     for i in instances:
         tags = { t['Key']: t['Value'] for t in i.tags or [] }
@@ -102,15 +119,14 @@ def list_instances(project):
     return
 
 @instances.command('snapshot')
-@click.option('--project', default=None, help="Only instances for project (tag Project:<name>)")
-def snapshot_instances(project):
+@click.pass_obj
+def snapshot_instances(ctx):
     "Create a snapshot for each EC2 instances"
 
-    instances = filter_instances(project)
+    instances = ctx.instances
 
     for i in instances:
-        print("Stopping {0}...".format(i.id))
-        i.stop()
+        stop_instance(i)
         i.wait_until_stopped()
 
         for v in i.volumes.all():
@@ -124,54 +140,61 @@ def snapshot_instances(project):
                 print("  Problem creating snapshot for {0}.  ".format(v.id) + str(e))
                 continue
 
-        print("Starting {0}...".format(i.id))
-        i.start()
+        start_instance(i)
         i.wait_until_running()
 
     return
 
+def stop_instance(instance):
+    "Stop the specified instance"
+    print("Stopping {0}...".format(instance.id))
+    try:
+        instance.stop()
+    except botocore.exceptions.ClientError as e:
+        print("  Unable to stop {0}  ".format(instance.id + str(e)))
+
+    return
+
+
 @instances.command('stop')
-@click.option('--project', default=None, help="Only instances for project (tag Project:<name>)")
-def stop_instances(project):
+@click.pass_obj
+def stop_instances(ctx):
     "Stop EC2 instances"
 
-    instances = filter_instances(project)
+    for i in ctx.instances:
+        stop_instance(i)
 
-    for i in instances:
-        print("Stopping {0}...".format(i.id))
-        try:
-            i.stop()
-        except botocore.exceptions.ClientError as e:
-            print("  Unable to stop {0}  ".format(i.id + str(e)))
-            continue
+    return
+
+
+def start_instance(instance):
+    "Start the specified instance"
+    print("Starting {0}...".format(instance.id))
+    try:
+        instance.start()
+    except botocore.exceptions.ClientError as e:
+        print("  Unable to start {0}.  ".format(instance.id + str(e)))
 
     return
 
 
 @instances.command('start')
-@click.option('--project', default=None, help="Only instances for project (tag Project:<name>)")
-def start_instances(project):
+@click.pass_obj
+def start_instances(ctx):
     "Start EC2 instances"
 
-    instances = filter_instances(project)
-
-    for i in instances:
-        print("Starting {0}...".format(i.id))
-        try:
-            i.start()
-        except botocore.exceptions.ClientError as e:
-            print("  Unable to start {0}.  ".format(i.id + str(e)))
-            continue
+    for i in ctx.instances:
+        start_instance(i)
 
     return
 
 @instances.command('reboot')
-@click.option('--project', default=None, help="Only instances for project (tag Project:<name>)")
+@click.pass_obj
 @click.option('--dryrun',  default=False, is_flag=True, help="Dont actually reboot, just show what would be be rebooted")
-def reboot_instances(project, dryrun):
+def reboot_instances(ctx, dryrun):
     "Reboot EC2 instances"
 
-    instances = filter_instances(project)
+    instances = ctx.instances
 
     reboot_list = []
     for i in instances:
