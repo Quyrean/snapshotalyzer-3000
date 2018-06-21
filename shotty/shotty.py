@@ -62,14 +62,18 @@ class ShottyCtx(object):
 
 
 @click.group()
-@click.option('--project',  default=None,     help="Specify instance by tag, only instances with the given tag will be used. (tag Project:TEXT)")
-@click.option('--force',    default=False,    is_flag=True, help="Safty check, use to specify ALL instances you have permission for")
-@click.option('--profile',  default="shotty", help="Specify which aws ec2 profile to use")
+@click.option('--profile',                default="shotty", help="Specify which aws ec2 profile to use (default: shotty)")
+@click.option('--region',   'regionName', default=None,     help="Override region in profile (default is from profile)")
+@click.option('--project',                default=None,     help="Specify instance by tag, only instances with the given tag will be used. (tag Project:TEXT)")
 @click.option('--instance', 'instanceId', default=None,     help="Specify exact instance id")
-@click.option('--region',   'regionName', default=None,     help="Override region in profile")
+@click.option('--force',                  default=False, is_flag=True, help="Safty check, use to specify ALL instances you have permission for")
 @click.pass_context
 def cli(ctx, project, force, profile, instanceId, regionName):
-    """Shotty manages snapshots"""
+    """Shotty manages aws ec2 instances and snapshots.  To setup, create an aws profile using:
+
+           aws configure --profile shotty
+    
+    """
 
     #check for force flag
     if force == False and not project and not instanceId:
@@ -80,7 +84,7 @@ def cli(ctx, project, force, profile, instanceId, regionName):
     try:
         session = boto3.Session(profile_name=profile, region_name=regionName)
     except botocore.exceptions.ProfileNotFound as e:
-        raise click.ClickException("Profile '" + str(profile) + "' not found")
+        raise click.ClickException("Profile '" + str(profile) + "' not found.  Use 'aws configure --profile shotty' to create profile")
         return
     except Exception as e:
         raise click.ClickException("Unable to use profile  " + str(e))
