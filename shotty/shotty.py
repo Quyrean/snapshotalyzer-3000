@@ -165,6 +165,33 @@ def start_instances(project):
 
     return
 
+@instances.command('reboot')
+@click.option('--project', default=None, help="Only instances for project (tag Project:<name>)")
+@click.option('--dryrun',  default=False, is_flag=True, help="Dont actually reboot, just show what would be be rebooted")
+def reboot_instances(project, dryrun):
+    "Reboot EC2 instances"
+
+    instances = filter_instances(project)
+
+    reboot_list = []
+    for i in instances:
+        print("Adding {0} to reboot list".format(i.id))
+        reboot_list.append(i.id)
+
+    client = session.client('ec2')
+    print("Rebooting instances " + " ".join(reboot_list))
+    try:
+        response = client.reboot_instances(
+            InstanceIds=reboot_list,
+            DryRun=False
+            )
+
+    except Exception as e:
+        print("Something bad happened " + str(e))
+
+
+    return
+
 
 if __name__ == '__main__':
     cli()
