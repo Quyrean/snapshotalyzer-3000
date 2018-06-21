@@ -46,8 +46,9 @@ def needs_snapshot(instance, days):
         snapshots = list(v.snapshots.all())
         if snapshots:
             delta = right_now - snapshots[0].start_time
-            if snapshots[0].state == 'pending' or  (delta.days > 0 and delta.days <= days):
-                print("  Skipping {0}, {3} it has only been {1} days since its' last confession".format(v.id, str(delta.days), str(snapshots[0].state)))
+            #print ("{0} - state: {1} delta: {2}".format(v.id, str(snapshots[0].state), str(delta.days)))
+            if snapshots[0].state == 'pending' or days > 0 and (delta.days >= 0 and delta.days <= days):
+                print("  Skipping {0}, {2} it has only been {1} days since its' last confession".format(v.id, str(delta.days), str(snapshots[0].state)))
                 continue
 
         answer.append(v)
